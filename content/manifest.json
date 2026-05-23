@@ -1,0 +1,29 @@
+{
+  "collections": ["散文", "技术", "旅行"],
+  "articles": [
+    {
+      "id": "post1",
+      "title": "我的第一篇博客",
+      "date": "2026-05-20",
+      "collection": "散文",
+      "tags": ["生活"],
+      "file": "my-first-post.md"
+    },
+    {
+      "id": "travel1",
+      "title": "箱根游记",
+      "date": "2026-04-15",
+      "collection": "旅行",
+      "tags": ["日本", "温泉"],
+      "file": "travel-notes.docx"
+    },
+    {
+      "id": "note1",
+      "title": "零散思绪",
+      "date": "2026-04-01",
+      "collection": "",
+      "tags": [],
+      "file": "diary.txt"
+    }
+  ]
+}

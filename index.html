@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>轻羽 · 私人册子</title>
+    <!-- 外部库：Markdown 解析 + Word 文档解析 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+    <style>
+        :root {
+            --bg: #0c0c0c;
+            --surface: #161616;
+            --text: #e0e0e0;
+            --text-secondary: #909090;
+            --accent: #ffffff;
+            --border: rgba(255,255,255,0.08);
+            --font-serif: "Noto Serif SC", "Source Han Serif SC", Georgia, "Times New Roman", serif;
+            --font-sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+            --max-width: 720px;
+            --side-padding: 2rem;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-serif);
+            line-height: 1.7;
+            letter-spacing: 0.02em;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+        #particle-canvas {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            pointer-events: none; z-index: 0; opacity: 0.4;
+        }
+        .app-container {
+            position: relative; z-index: 2;
+            width: 100%; max-width: var(--max-width);
+            padding: 0 var(--side-padding);
+            margin-top: 6rem;
+            min-height: 100vh;
+        }
+        .view-enter {
+            animation: slideUp 0.45s cubic-bezier(0.2, 0.0, 0, 1.0) forwards;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(28px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .home-view {
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            padding-top: 8vh;
+        }
+        .home-author {
+            font-size: 2.8rem; font-weight: 300; letter-spacing: 0.1em;
+            margin-bottom: 0.5rem; cursor: pointer; user-select: none; transition: opacity 0.3s;
+        }
+        .home-author:hover { opacity: 0.7; }
+        .home-blog-name {
+            font-family: var(--font-sans); font-size: 0.9rem; letter-spacing: 0.25em;
+            text-transform: uppercase; color: var(--text-secondary); margin-bottom: 3.5rem; font-weight: 300;
+        }
+        .collections-section {
+            margin-bottom: 3rem; width: 100%; max-width: 400px;
+        }
+        .collections-title {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em;
+            color: var(--text-secondary); margin-bottom: 1.2rem; opacity: 0.7;
+        }
+        .collections-list {
+            display: flex; flex-wrap: wrap; gap: 1.2rem; justify-content: center;
+        }
+        .collection-item {
+            font-family: var(--font-sans); font-size: 0.85rem; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--text-secondary); cursor: pointer;
+            padding: 0.2rem 0; border-bottom: 1px solid transparent; transition: all 0.3s;
+        }
+        .collection-item:hover { color: var(--accent); border-bottom-color: var(--accent); }
+        .no-collections {
+            color: var(--text-secondary); opacity: 0.5; font-style: italic; font-size: 0.8rem;
+        }
+        .search-wrapper {
+            position: relative; width: 100%; max-width: 360px; margin: 0 auto;
+        }
+        .search-input {
+            width: 100%; background: transparent; border: none;
+            border-bottom: 1px solid var(--border); padding: 0.8rem 0.2rem;
+            font-family: var(--font-sans); font-size: 1rem; color: var(--text);
+            outline: none; letter-spacing: 0.04em; transition: border-color 0.3s;
+        }
+        .search-input:focus { border-bottom-color: var(--accent); }
+        .search-input::placeholder { color: var(--text-secondary); opacity: 0.5; }
+        .search-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; margin-top: 0.4rem; max-height: 260px; overflow-y: auto;
+            opacity: 0; transform: translateY(-8px); pointer-events: none;
+            transition: all 0.25s ease; z-index: 20;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.5);
+        }
+        .search-dropdown.active {
+            opacity: 1; transform: translateY(0); pointer-events: auto;
+        }
+        .search-result-item {
+            padding: 0.7rem 1rem; font-family: var(--font-sans); font-size: 0.9rem;
+            cursor: pointer; transition: background 0.2s; color: var(--text);
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .search-result-item:last-child { border-bottom: none; }
+        .search-result-item:hover { background: rgba(255,255,255,0.04); }
+        .search-empty {
+            padding: 1rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;
+        }
+        .list-header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            margin-bottom: 2.5rem; padding-bottom: 0.8rem; border-bottom: 1px solid var(--border);
+        }
+        .list-title { font-size: 1.1rem; font-weight: 300; color: var(--text-secondary); letter-spacing: 0.05em; }
+        .back-btn {
+            background: none; border: none; color: var(--text-secondary); font-family: var(--font-sans);
+            font-size: 0.8rem; cursor: pointer; letter-spacing: 0.06em; transition: color 0.3s;
+            border-bottom: 1px solid transparent; padding-bottom: 2px;
+        }
+        .back-btn:hover { color: var(--accent); border-bottom-color: var(--accent); }
+        .article-card {
+            padding: 1.8rem 0; border-bottom: 1px solid var(--border); cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .article-card:hover { transform: translateX(6px); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); }
+        .card-date { font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.4rem; letter-spacing: 0.06em; }
+        .card-title { font-size: 1.6rem; font-weight: 350; margin-bottom: 0.3rem; }
+        .card-excerpt { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
+        .detail-header { margin-bottom: 3rem; }
+        .detail-title { font-size: 2.2rem; font-weight: 300; margin: 1rem 0 0.5rem; letter-spacing: 0.06em; }
+        .detail-meta { color: var(--text-secondary); font-size: 0.8rem; display: flex; gap: 1.5rem; }
+        .detail-content { line-height: 1.9; }
+        .detail-content img { max-width: 100%; border-radius: 4px; margin: 1.5rem 0; filter: grayscale(0.2); }
+        .detail-content blockquote {
+            border-left: 2px solid var(--accent); padding-left: 1.2rem;
+            font-style: italic; color: var(--text-secondary); margin: 1.8rem 0;
+        }
+        .detail-content pre {
+            background: var(--surface); padding: 1rem; border-radius: 6px;
+            overflow-x: auto; font-family: monospace; font-size: 0.85rem;
+        }
+        .empty-state { text-align: center; color: var(--text-secondary); padding: 4rem 0; font-style: italic; }
+        @media (max-width: 600px) {
+            :root { --side-padding: 1.2rem; }
+            .home-author { font-size: 2rem; }
+            .detail-title { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+<canvas id="particle-canvas"></canvas>
+<div class="app-container" id="appContainer"></div>
+
+<script>
+    (() => {
+        const STATE = {
+            view: 'home',
+            currentCollection: null,
+            searchQuery: '',
+            articles: [],
+            collections: [],
+            blogId: '设施良心保安',
+            idList: ['设施良心保安', '嘟嘟哒'],
+        };
+
+        const appContainer = document.getElementById('appContainer');
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 粒子系统
+        let particles = [];
+        const PARTICLE_COUNT = window.innerWidth < 600 ? 18 : 30;
+        class Particle {
+            constructor() { this.reset(); }
+            reset() {
+                this.x = Math.random() * window.innerWidth;
+                this.y = Math.random() * window.innerHeight;
+                this.size = Math.random() * 1.8 + 0.6;
+                this.speedX = (Math.random() - 0.5) * 0.2;
+                this.speedY = (Math.random() - 0.5) * 0.2;
+                this.opacity = Math.random() * 0.15 + 0.05;
+            }
+            update() {
+                this.x += this.speedX; this.y += this.speedY;
+                if (this.x < 0 || this.x > window.innerWidth || this.y < 0 || this.y > window.innerHeight) this.reset();
+            }
+            draw() {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(255,255,255,${this.opacity})`; ctx.fill();
+            }
+        }
+        function initParticles() {
+            particles = [];
+            for (let i=0; i<PARTICLE_COUNT; i++) particles.push(new Particle());
+        }
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(animate);
+        }
+        function resizeCanvas() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        }
+
+        const escapeHtml = s => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]);
+
+        // 数据加载
+        async function loadManifest() {
+            try {
+                const res = await fetch('/content/manifest.json');
+                if (!res.ok) throw new Error('manifest not found');
+                const data = await res.json();
+                STATE.collections = data.collections || [];
+                STATE.articles = data.articles || [];
+            } catch {
+                STATE.collections = [];
+                STATE.articles = [];
+            }
+        }
+
+        async function loadArticleContent(article) {
+            if (!article.file) return null;
+            const fileUrl = `/content/${article.file}`;
+            try {
+                const res = await fetch(fileUrl);
+                if (!res.ok) throw new Error('File not found');
+                const ext = article.file.split('.').pop().toLowerCase();
+                if (ext === 'md') {
+                    const text = await res.text();
+                    return marked.parse(text);
+                } else if (ext === 'docx') {
+                    const arrayBuffer = await res.arrayBuffer();
+                    const result = await mammoth.convertToHtml({ arrayBuffer });
+                    return result.value;
+                } else if (ext === 'txt') {
+                    const text = await res.text();
+                    return `<pre>${escapeHtml(text)}</pre>`;
+                } else {
+                    return `<p>不支持的文件格式：${ext}</p>`;
+                }
+            } catch (err) {
+                console.error('加载文章失败:', err);
+                return '<p>文章加载失败</p>';
+            }
+        }
+
+        // 视图渲染
+        function renderWithAnimation(html) {
+            appContainer.innerHTML = html;
+            appContainer.classList.remove('view-enter');
+            void appContainer.offsetWidth;
+            appContainer.classList.add('view-enter');
+        }
+
+        function renderHome() {
+            const collectionsHtml = STATE.collections.length === 0
+                ? '<div class="no-collections">暂无分区</div>'
+                : STATE.collections.map(c => `<span class="collection-item" data-collection="${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('');
+
+            const html = `
+                <div class="home-view">
+                    <div class="home-author" id="authorName">${escapeHtml(STATE.blogId)}</div>
+                    <div class="home-blog-name">私人册子</div>
+                    <div class="collections-section">
+                        <div class="collections-title">分区</div>
+                        <div class="collections-list" id="collectionsList">${collectionsHtml}</div>
+                    </div>
+                    <div class="search-wrapper" id="searchWrapper">
+                        <input type="text" class="search-input" id="homeSearchInput" placeholder="搜索文章..." autocomplete="off">
+                        <div class="search-dropdown" id="searchDropdown"></div>
+                    </div>
+                </div>
+            `;
+            renderWithAnimation(html);
+
+            document.getElementById('authorName').addEventListener('click', () => {
+                const idx = STATE.idList.indexOf(STATE.blogId);
+                STATE.blogId = STATE.idList[(idx + 1) % STATE.idList.length];
+                document.getElementById('authorName').textContent = STATE.blogId;
+            });
+
+            document.querySelectorAll('.collection-item').forEach(item => {
+                item.addEventListener('click', e => {
+                    STATE.currentCollection = e.target.dataset.collection;
+                    STATE.searchQuery = '';
+                    STATE.view = 'list';
+                    renderListView();
+                });
+            });
+
+            const searchInput = document.getElementById('homeSearchInput');
+            const dropdown = document.getElementById('searchDropdown');
+            const updateDropdown = (q) => {
+                if (!q.trim()) { dropdown.classList.remove('active'); dropdown.innerHTML = ''; return; }
+                const lower = q.toLowerCase();
+                const results = STATE.articles.filter(a =>
+                    a.title.toLowerCase().includes(lower) ||
+                    (a.tags && a.tags.some(t => t.toLowerCase().includes(lower)))
+                );
+                if (results.length === 0) {
+                    dropdown.innerHTML = '<div class="search-empty">无匹配文章</div>';
+                } else {
+                    dropdown.innerHTML = results.slice(0, 8).map(a =>
+                        `<div class="search-result-item" data-id="${escapeHtml(a.id)}">${escapeHtml(a.title)}</div>`
+                    ).join('');
+                }
+                dropdown.classList.add('active');
+            };
+            searchInput.addEventListener('input', e => updateDropdown(e.target.value));
+            searchInput.addEventListener('focus', () => { if (searchInput.value.trim()) updateDropdown(searchInput.value); });
+            document.addEventListener('click', e => {
+                if (!document.getElementById('searchWrapper').contains(e.target)) dropdown.classList.remove('active');
+            });
+            dropdown.addEventListener('click', e => {
+                const item = e.target.closest('.search-result-item');
+                if (!item) return;
+                const id = item.dataset.id;
+                STATE.searchQuery = STATE.articles.find(a => a.id === id)?.title || '';
+                STATE.currentCollection = null;
+                STATE.view = 'list';
+                renderListView();
+                dropdown.classList.remove('active');
+                searchInput.value = '';
+            });
+        }
+
+        function renderListView() {
+            let filtered = [...STATE.articles];
+            if (STATE.currentCollection) filtered = filtered.filter(a => a.collection === STATE.currentCollection);
+            if (STATE.searchQuery) {
+                const q = STATE.searchQuery.toLowerCase();
+                filtered = filtered.filter(a =>
+                    a.title.toLowerCase().includes(q) ||
+                    (a.tags && a.tags.some(t => t.toLowerCase().includes(q)))
+                );
+            }
+            const title = STATE.currentCollection || (STATE.searchQuery ? `搜索：${STATE.searchQuery}` : '所有文章');
+            const cards = filtered.length === 0
+                ? '<div class="empty-state">暂无文章</div>'
+                : filtered.map(a => {
+                    const d = new Date(a.date);
+                    const date = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+                    return `<article class="article-card" data-id="${escapeHtml(a.id)}">
+                        <div class="card-date">${date}</div>
+                        <div class="card-title">${escapeHtml(a.title)}</div>
+                        <div class="card-excerpt">${escapeHtml(a.file || '')}</div>
+                    </article>`;
+                }).join('');
+            const html = `
+                <div class="list-view">
+                    <div class="list-header">
+                        <span class="list-title">${escapeHtml(title)}</span>
+                        <button class="back-btn" id="backToHome">← 返回首页</button>
+                    </div>
+                    ${cards}
+                </div>
+            `;
+            renderWithAnimation(html);
+
+            document.getElementById('backToHome').addEventListener('click', () => {
+                STATE.view = 'home'; STATE.currentCollection = null; STATE.searchQuery = '';
+                renderHome();
+            });
+            document.querySelectorAll('.article-card').forEach(card => {
+                card.addEventListener('click', async () => {
+                    const id = card.dataset.id;
+                    STATE.view = 'detail';
+                    await renderDetailView(id);
+                });
+            });
+        }
+
+        async function renderDetailView(id) {
+            const meta = STATE.articles.find(a => a.id === id);
+            if (!meta) { appContainer.innerHTML = '<p>文章未找到</p>'; return; }
+            const contentHtml = await loadArticleContent(meta);
+            const d = new Date(meta.date);
+            const date = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+            const html = `
+                <div class="detail-view">
+                    <div class="detail-header">
+                        <button class="back-btn" id="detailBack">← 返回列表</button>
+                        <h1 class="detail-title">${escapeHtml(meta.title)}</h1>
+                        <div class="detail-meta"><span>${date}</span><span>${escapeHtml(meta.collection||'')}</span></div>
+                    </div>
+                    <div class="detail-content">${contentHtml || '<p>内容为空</p>'}</div>
+                </div>
+            `;
+            renderWithAnimation(html);
+            document.getElementById('detailBack').addEventListener('click', () => {
+                STATE.view = 'list'; renderListView();
+            });
+        }
+
+        // 初始化
+        (async () => {
+            resizeCanvas();
+            initParticles();
+            animate();
+            window.addEventListener('resize', () => { resizeCanvas(); initParticles(); });
+            await loadManifest();
+            renderHome();
+        })();
+    })();
+</script>
+</body>
+</html>
