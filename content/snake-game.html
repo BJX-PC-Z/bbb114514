@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>导致混沌军心动摇的贪吃蛇</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --border: #1a3a1a;
+            --green: #33ff33;
+            --green-light: #66ff44;
+            --food: #aaff33;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .game-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .monitor-frame {
+            background: #0d0d0d;
+            border: 4px solid #1a2a1a;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow:
+                inset 0 0 40px rgba(0, 50, 0, 0.15),
+                0 0 20px rgba(0, 80, 0, 0.3),
+                0 0 60px rgba(0, 40, 0, 0.2);
+            position: relative;
+        }
+        .monitor-frame::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 0, 0, 0.03) 2px,
+                    rgba(0, 0, 0, 0.03) 4px);
+            pointer-events: none;
+            border-radius: 4px;
+            z-index: 10;
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            max-width: 100%;
+            height: auto;
+            cursor: crosshair;
+            position: relative;
+            z-index: 5;
+        }
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 420px;
+            color: #2a5a2a;
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 0 8px;
+        }
+        .info-bar span {
+            font-family: 'Courier New', monospace;
+        }
+        .blink {
+            animation: blink 0.8s steps(1) infinite;
+        }
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.2;
+            }
+        }
+        .controls-hint {
+            color: #1a3a1a;
+            font-size: 10px;
+            letter-spacing: 3px;
+            text-align: center;
+            opacity: 0.6;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <div class="monitor-frame">
+            <canvas id="gameCanvas"></canvas>
+        </div>
+        <div class="info-bar">
+            <span>▲▼◄► / WASD</span>
+            <span class="blink" id="statusText">● 游戏中</span>
+            <span>SPACE 暂停</span>
+        </div>
+        <div class="controls-hint" id="mobileHint">滑动屏幕控制方向</div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const statusText = document.getElementById('statusText');
+            const mobileHint = document.getElementById('mobileHint');
+
+            // --- 游戏参数 ---
+            const COLS = 20;
+            const ROWS = 20;
+            const CELL = 20;
+            const GAME_X = 10;
+            const GAME_Y = 44;
+            const GAME_W = COLS * CELL;
+            const GAME_H = ROWS * CELL;
+            const CANVAS_W = GAME_W + 20;
+            const CANVAS_H = GAME_H + 48;
+
+            canvas.width = CANVAS_W;
+            canvas.height = CANVAS_H;
+            canvas.style.width = Math.min(CANVAS_W, 420) + 'px';
+
+            // --- 像素数字定义 (5行 x 3列) ---
+            const PIXEL_NUMS = {
+                '0': [
+                    [1, 1, 1],
+                    [1, 0, 1],
+                    [1, 0, 1],
+                    [1, 0, 1],
+                    [1, 1, 1]
+                ],
+                '1': [
+                    [0, 1, 0],
+                    [1, 1, 0],
+                    [0, 1, 0],
+                    [0, 1, 0],
+                    [1, 1, 1]
+                ],
+                '2': [
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [1, 1, 1],
+                    [1, 0, 0],
+                    [1, 1, 1]
+                ],
+                '3': [
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [1, 1, 1]
+                ],
+                '4': [
+                    [1, 0, 1],
+                    [1, 0, 1],
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [0, 0, 1]
+                ],
+                '5': [
+                    [1, 1, 1],
+                    [1, 0, 0],
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [1, 1, 1]
+                ],
+                '6': [
+                    [1, 1, 1],
+                    [1, 0, 0],
+                    [1, 1, 1],
+                    [1, 0, 1],
+                    [1, 1, 1]
+                ],
+                '7': [
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [0, 1, 0],
+                    [1, 0, 0],
+                    [1, 0, 0]
+                ],
+                '8': [
+                    [1, 1, 1],
+                    [1, 0, 1],
+                    [1, 1, 1],
+                    [1, 0, 1],
+                    [1, 1, 1]
+                ],
+                '9': [
+                    [1, 1, 1],
+                    [1, 0, 1],
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [1, 1, 1]
+                ],
+                ':': [
+                    [0],
+                    [1],
+                    [0],
+                    [1],
+                    [0]
+                ],
+            };
+
+            const PIXEL_SIZE = 4;
+            const NUM_W = 3 * PIXEL_SIZE;
+            const NUM_H = 5 * PIXEL_SIZE;
+            const NUM_GAP = 6;
+
+            // --- 游戏状态 ---
+            let snake = [];
+            let food = { x: 10, y: 8 };
+            let direction = { x: 1, y: 0 };
+            let nextDirection = { x: 1, y: 0 };
+            let score = 0;
+            let gameRunning = true;
+            let gamePaused = false;
+            let gameOver = false;
+            let frameCount = 0;
+            let gameSpeed = 150;
+            let lastUpdate = 0;
+            let animationId = null;
+
+            // --- 触摸相关 ---
+            let touchStartX = 0;
+            let touchStartY = 0;
+
+            // --- 初始化蛇 ---
+            function initSnake() {
+                snake = [];
+                const startX = Math.floor(COLS / 2) - 2;
+                const startY = Math.floor(ROWS / 2);
+                for (let i = 0; i < 3; i++) {
+                    snake.push({ x: startX - i, y: startY });
+                }
+            }
+
+            // --- 生成食物 ---
+            function spawnFood() {
+                const available = [];
+                const snakeSet = new Set(snake.map(s => `${s.x},${s.y}`));
+                for (let x = 0; x < COLS; x++) {
+                    for (let y = 0; y < ROWS; y++) {
+                        if (!snakeSet.has(`${x},${y}`)) {
+                            available.push({ x, y });
+                        }
+                    }
+                }
+                if (available.length === 0) return null;
+                const idx = Math.floor(Math.random() * available.length);
+                return available[idx];
+            }
+
+            // --- 重置游戏 ---
+            function resetGame() {
+                initSnake();
+                direction = { x: 1, y: 0 };
+                nextDirection = { x: 1, y: 0 };
+                score = 0;
+                gameSpeed = 150;
+                gameRunning = true;
+                gamePaused = false;
+                gameOver = false;
+                food = spawnFood() || { x: 10, y: 8 };
+                statusText.textContent = '● 游戏中';
+                statusText.classList.add('blink');
+                mobileHint.style.opacity = '0.6';
+                lastUpdate = performance.now();
+            }
+
+            // --- 游戏逻辑更新 ---
+            function update() {
+                if (!gameRunning || gamePaused || gameOver) return;
+
+                direction = { ...nextDirection };
+
+                const head = snake[0];
+                const newHead = {
+                    x: head.x + direction.x,
+                    y: head.y + direction.y,
+                };
+
+                // 撞墙检测
+                if (newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS) {
+                    endGame();
+                    return;
+                }
+
+                // 撞自己检测
+                for (let i = 0; i < snake.length; i++) {
+                    if (snake[i].x === newHead.x && snake[i].y === newHead.y) {
+                        endGame();
+                        return;
+                    }
+                }
+
+                snake.unshift(newHead);
+
+                // 吃食物检测
+                if (newHead.x === food.x && newHead.y === food.y) {
+                    score += 10;
+                    gameSpeed = Math.max(60, 150 - Math.floor(score / 50) * 10);
+                    const newFood = spawnFood();
+                    if (newFood) {
+                        food = newFood;
+                    } else {
+                        // 胜利！
+                        gameOver = true;
+                        gameRunning = false;
+                        statusText.textContent = '★ 通关!';
+                        statusText.classList.remove('blink');
+                        return;
+                    }
+                } else {
+                    snake.pop();
+                }
+            }
+
+            function endGame() {
+                gameRunning = false;
+                gameOver = true;
+                statusText.textContent = '■ 游戏结束';
+                statusText.classList.remove('blink');
+                mobileHint.style.opacity = '1';
+            }
+
+            // --- 绘制函数 ---
+            function drawPixelNumber(numStr, startX, startY) {
+                const digits = String(numStr).padStart(3, '0').split('');
+                let cx = startX;
+                for (const digit of digits) {
+                    const pattern = PIXEL_NUMS[digit];
+                    if (!pattern) { cx += NUM_W + NUM_GAP; continue; }
+                    for (let row = 0; row < pattern.length; row++) {
+                        for (let col = 0; col < pattern[row].length; col++) {
+                            if (pattern[row][col] === 1) {
+                                const px = cx + col * PIXEL_SIZE;
+                                const py = startY + row * PIXEL_SIZE;
+                                ctx.fillStyle = '#33ff33';
+                                ctx.fillRect(px, py, PIXEL_SIZE, PIXEL_SIZE);
+                            }
+                        }
+                    }
+                    cx += NUM_W + NUM_GAP;
+                }
+            }
+
+            function drawGameBorder() {
+                ctx.strokeStyle = '#1a4a1a';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(GAME_X - 2, GAME_Y - 2, GAME_W + 4, GAME_H + 4);
+                ctx.strokeStyle = '#0d2a0d';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(GAME_X - 4, GAME_Y - 4, GAME_W + 8, GAME_H + 8);
+
+                // 角落装饰像素
+                const corners = [
+                    { x: GAME_X - 4, y: GAME_Y - 4 },
+                    { x: GAME_X + GAME_W + 2, y: GAME_Y - 4 },
+                    { x: GAME_X - 4, y: GAME_Y + GAME_H + 2 },
+                    { x: GAME_X + GAME_W + 2, y: GAME_Y + GAME_H + 2 },
+                ];
+                ctx.fillStyle = '#1a4a1a';
+                for (const c of corners) {
+                    ctx.fillRect(c.x, c.y, 3, 3);
+                }
+            }
+
+            function drawGrid() {
+                ctx.fillStyle = 'rgba(0,30,0,0.08)';
+                for (let x = 0; x < COLS; x++) {
+                    for (let y = 0; y < ROWS; y++) {
+                        if ((x + y) % 2 === 0) {
+                            ctx.fillRect(GAME_X + x * CELL, GAME_Y + y * CELL, CELL, CELL);
+                        }
+                    }
+                }
+            }
+
+            function drawSnake() {
+                snake.forEach((seg, index) => {
+                    const sx = GAME_X + seg.x * CELL;
+                    const sy = GAME_Y + seg.y * CELL;
+                    if (index === 0) {
+                        // 蛇头 - 稍亮
+                        ctx.fillStyle = '#44ff44';
+                        ctx.fillRect(sx, sy, CELL, CELL);
+                        ctx.fillStyle = '#88ff88';
+                        ctx.fillRect(sx + 3, sy + 3, CELL - 6, CELL - 6);
+                        // 眼睛
+                        const eyeX = direction.x === 1 ? sx + CELL - 5 :
+                            direction.x === -1 ? sx + 2 : sx + CELL / 2 - 2;
+                        const eyeY = direction.y === -1 ? sy + 2 :
+                            direction.y === 1 ? sy + CELL - 5 : sy + CELL / 2 - 2;
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(eyeX, eyeY, 4, 4);
+                    } else {
+                        // 蛇身
+                        const brightness = 0.5 + 0.5 * (1 - index / Math.max(snake.length, 20));
+                        const g = Math.floor(180 + 75 * brightness);
+                        ctx.fillStyle = `rgb(0,${g},0)`;
+                        ctx.fillRect(sx + 1, sy + 1, CELL - 2, CELL - 2);
+                        ctx.fillStyle = `rgb(20,${Math.min(255,g+30)},20)`;
+                        ctx.fillRect(sx + 2, sy + 2, CELL - 4, CELL - 4);
+                    }
+                });
+            }
+
+            function drawFood() {
+                const fx = GAME_X + food.x * CELL;
+                const fy = GAME_Y + food.y * CELL;
+                const pulse = Math.sin(frameCount * 0.3) * 2;
+                const size = CELL + pulse;
+
+                ctx.fillStyle = '#aaff33';
+                ctx.fillRect(
+                    fx + (CELL - size) / 2,
+                    fy + (CELL - size) / 2,
+                    size,
+                    size
+                );
+                ctx.fillStyle = '#ccff66';
+                ctx.fillRect(
+                    fx + (CELL - size) / 2 + 2,
+                    fy + (CELL - size) / 2 + 2,
+                    Math.max(size - 4, 4),
+                    Math.max(size - 4, 4)
+                );
+            }
+
+            function drawGameOver() {
+                // 半透明遮罩
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(GAME_X, GAME_Y, GAME_W, GAME_H);
+
+                // 像素大字 "GAME OVER"
+                const goX = GAME_X + GAME_W / 2 - 60;
+                const goY = GAME_Y + GAME_H / 2 - 40;
+                ctx.fillStyle = '#33ff33';
+                ctx.font = 'bold 24px "Courier New", monospace';
+                ctx.fillText('GAME', goX - 5, goY);
+                ctx.fillText('OVER', goX + 15, goY + 30);
+
+                // 得分
+                ctx.fillStyle = '#66ff66';
+                ctx.font = '14px "Courier New", monospace';
+                ctx.fillText(`SCORE: ${score}`, goX + 10, goY + 60);
+
+                // 重新开始提示
+                const alpha = 0.5 + 0.5 * Math.sin(frameCount * 0.05);
+                ctx.fillStyle = `rgba(100,255,100,${alpha})`;
+                ctx.font = '11px "Courier New", monospace';
+                ctx.fillText('按 ENTER 重新开始', goX - 10, goY + 82);
+            }
+
+            function drawPauseOverlay() {
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(GAME_X, GAME_Y, GAME_W, GAME_H);
+                ctx.fillStyle = '#33ff33';
+                ctx.font = 'bold 20px "Courier New", monospace';
+                ctx.fillText('PAUSED', GAME_X + GAME_W / 2 - 50, GAME_Y + GAME_H / 2);
+            }
+
+            function drawScoreLabel() {
+                const labelX = GAME_X + 4;
+                const labelY = 4;
+                // "SC" 像素字母标记
+                const sPattern = [
+                    [1, 1, 1],
+                    [1, 0, 0],
+                    [1, 1, 1],
+                    [0, 0, 1],
+                    [1, 1, 1]
+                ];
+                const cPattern = [
+                    [1, 1, 1],
+                    [1, 0, 0],
+                    [1, 0, 0],
+                    [1, 0, 0],
+                    [1, 1, 1]
+                ];
+                const miniSize = 3;
+                [sPattern, cPattern].forEach((pat, idx) => {
+                    const ox = labelX + idx * (3 * miniSize + 4);
+                    for (let r = 0; r < 5; r++) {
+                        for (let c = 0; c < 3; c++) {
+                            if (pat[r][c] === 1) {
+                                ctx.fillStyle = '#33ff33';
+                                ctx.fillRect(ox + c * miniSize, labelY + r * miniSize, miniSize,
+                                    miniSize);
+                            }
+                        }
+                    }
+                });
+                // 冒号
+                ctx.fillStyle = '#33ff33';
+                ctx.fillRect(labelX + 22, labelY + 3, 3, 3);
+                ctx.fillRect(labelX + 22, labelY + 10, 3, 3);
+                // 得分数字
+                drawPixelNumber(String(score), labelX + 30, labelY);
+            }
+
+            function draw() {
+                // 清除
+                ctx.fillStyle = '#080808';
+                ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+                // 游戏区域背景
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fillRect(GAME_X, GAME_Y, GAME_W, GAME_H);
+
+                drawGrid();
+                drawGameBorder();
+                drawScoreLabel();
+                drawFood();
+                drawSnake();
+
+                if (gameOver) drawGameOver();
+                if (gamePaused && !gameOver) drawPauseOverlay();
+            }
+
+            // --- 游戏循环 ---
+            function gameLoop(timestamp) {
+                animationId = requestAnimationFrame(gameLoop);
+
+                if (!gameRunning || gamePaused || gameOver) {
+                    frameCount++;
+                    if (gameOver) draw();
+                    return;
+                }
+
+                if (timestamp - lastUpdate >= gameSpeed) {
+                    update();
+                    lastUpdate = timestamp;
+                    frameCount++;
+                }
+                draw();
+            }
+
+            // --- 键盘控制 ---
+            function handleKeyDown(e) {
+                if (gameOver && e.key === 'Enter') {
+                    resetGame();
+                    return;
+                }
+                if (e.key === ' ' || e.code === 'Space') {
+                    e.preventDefault();
+                    if (!gameOver) {
+                        gamePaused = !gamePaused;
+                        statusText.textContent = gamePaused ? '‖ 暂停中' : '● 游戏中';
+                        statusText.classList.toggle('blink', !gamePaused);
+                        if (gamePaused) draw();
+                    }
+                    return;
+                }
+                if (gamePaused || gameOver || !gameRunning) return;
+
+                switch (e.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                    case 'W':
+                        if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                    case 'S':
+                        if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
+                        break;
+                    case 'ArrowLeft':
+                    case 'a':
+                    case 'A':
+                        if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
+                        break;
+                    case 'ArrowRight':
+                    case 'd':
+                    case 'D':
+                        if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
+                        break;
+                }
+            }
+
+            // --- 触摸控制 ---
+            function handleTouchStart(e) {
+                if (e.target !== canvas) return;
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+            }
+
+            function handleTouchEnd(e) {
+                if (gameOver) {
+                    resetGame();
+                    return;
+                }
+                if (gamePaused || !gameRunning) return;
+                const touch = e.changedTouches[0];
+                const dx = touch.clientX - touchStartX;
+                const dy = touch.clientY - touchStartY;
+                const absDx = Math.abs(dx);
+                const absDy = Math.abs(dy);
+
+                if (Math.max(absDx, absDy) < 20) return;
+
+                if (absDx > absDy) {
+                    if (dx > 0 && direction.x !== -1) nextDirection = { x: 1, y: 0 };
+                    else if (dx < 0 && direction.x !== 1) nextDirection = { x: -1, y: 0 };
+                } else {
+                    if (dy > 0 && direction.y !== -1) nextDirection = { x: 0, y: 1 };
+                    else if (dy < 0 && direction.y !== 1) nextDirection = { x: 0, y: -1 };
+                }
+            }
+
+            function handleClick() {
+                if (gameOver) {
+                    resetGame();
+                } else if (!gameRunning && gameOver) {
+                    resetGame();
+                }
+            }
+
+            // --- 事件绑定 ---
+            document.addEventListener('keydown', handleKeyDown);
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: true });
+            canvas.addEventListener('touchend', handleTouchEnd, { passive: true });
+            canvas.addEventListener('click', handleClick);
+
+            // --- 检测移动端 ---
+            const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent);
+            if (isMobile) {
+                mobileHint.style.opacity = '0.8';
+                mobileHint.textContent = '滑动屏幕控制方向 · 点击重新开始';
+            }
+
+            // --- 启动 ---
+            resetGame();
+            lastUpdate = performance.now();
+            animationId = requestAnimationFrame(gameLoop);
+        })();
+    </script>
+</body>
+</html>
