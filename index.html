@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>轻羽 · 私人册子</title>
+    <title>保安·嘟嘟哒</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
     <style>
@@ -252,7 +252,6 @@
             }
         }
 
-        // 以下渲染函数与之前完全相同（未修改）
         function renderWithAnimation(html) {
             appContainer.innerHTML = html;
             appContainer.classList.remove('view-enter');
@@ -268,7 +267,7 @@
             const html = `
                 <div class="home-view">
                     <div class="home-author" id="authorName">${escapeHtml(STATE.blogId)}</div>
-                    <div class="home-blog-name">私人册子</div>
+                    <div class="home-blog-name">杂本</div>
                     <div class="collections-section">
                         <div class="collections-title">分区</div>
                         <div class="collections-list" id="collectionsList">${collectionsHtml}</div>
