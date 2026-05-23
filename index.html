@@ -174,7 +174,7 @@
         const canvas = document.getElementById('particle-canvas');
         const ctx = canvas.getContext('2d');
 
-        // 粒子系统
+        // 粒子系统（保持不变）
         let particles = [];
         const PARTICLE_COUNT = window.innerWidth < 600 ? 18 : 30;
         class Particle {
@@ -211,15 +211,16 @@
 
         const escapeHtml = s => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]);
 
-        // 数据加载
+        // 修改：使用相对路径加载 manifest 和文章文件
         async function loadManifest() {
             try {
-                const res = await fetch('/content/manifest.json');
+                const res = await fetch('./content/manifest.json');
                 if (!res.ok) throw new Error('manifest not found');
                 const data = await res.json();
                 STATE.collections = data.collections || [];
                 STATE.articles = data.articles || [];
-            } catch {
+            } catch (err) {
+                console.error('加载 manifest 失败:', err);
                 STATE.collections = [];
                 STATE.articles = [];
             }
@@ -227,7 +228,7 @@
 
         async function loadArticleContent(article) {
             if (!article.file) return null;
-            const fileUrl = `/content/${article.file}`;
+            const fileUrl = `./content/${article.file}`;
             try {
                 const res = await fetch(fileUrl);
                 if (!res.ok) throw new Error('File not found');
@@ -251,7 +252,7 @@
             }
         }
 
-        // 视图渲染
+        // 以下渲染函数与之前完全相同（未修改）
         function renderWithAnimation(html) {
             appContainer.innerHTML = html;
             appContainer.classList.remove('view-enter');
