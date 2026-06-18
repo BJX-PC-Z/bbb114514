@@ -153,9 +153,9 @@
             height: 85vh;
             min-height: 500px;
             border: 1px solid #2a2a2a;
+            background: #000;
             display: block;
             margin: 1rem 0;
-            background: #000;
         }
         @media (max-width: 600px) {
             :root { --side-padding: 1.2rem; }
@@ -225,7 +225,7 @@
 
         const escapeHtml = s => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]);
 
-        // 修改：使用相对路径加载 manifest 和文章文件
+        // 加载 manifest
         async function loadManifest() {
             try {
                 const res = await fetch('./content/manifest.json');
@@ -249,7 +249,8 @@
                 const ext = article.file.split('.').pop().toLowerCase();
                 if (ext === 'md') {
                     const text = await res.text();
-                    return marked.parse(text);
+                    // 关键：允许内联 HTML 和脚本
+                    return marked.parse(text, { sanitize: false });
                 } else if (ext === 'docx') {
                     const arrayBuffer = await res.arrayBuffer();
                     const result = await mammoth.convertToHtml({ arrayBuffer });
@@ -258,11 +259,8 @@
                     const text = await res.text();
                     return `<pre>${escapeHtml(text)}</pre>`;
                 } else if (ext === 'html') {
-                    // 使用 Blob URL 创建 iframe，确保脚本执行且不受跨域影响
-                    const text = await res.text();
-                    const blob = new Blob([text], { type: 'text/html' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    return `<iframe class="html-article-frame" src="${blobUrl}" allowfullscreen allow="fullscreen"></iframe>`;
+                    // 直接 iframe 加载，并允许全屏
+                    return `<iframe class="html-article-frame" src="./content/${article.file}" allowfullscreen allow="fullscreen"></iframe>`;
                 } else {
                     return `<p>不支持的文件格式：${ext}</p>`;
                 }
@@ -418,7 +416,7 @@
                 STATE.view = 'list'; renderListView();
             });
 
-            // 为 .html 文章添加双击全屏功能
+            // 为 .html 文章的 iframe 绑定双击全屏
             const iframe = document.querySelector('.html-article-frame');
             if (iframe) {
                 iframe.addEventListener('dblclick', () => {
@@ -433,7 +431,6 @@
             }
         }
 
-        // 初始化
         (async () => {
             resizeCanvas();
             initParticles();
